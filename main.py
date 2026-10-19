@@ -413,7 +413,8 @@ async def standings(interaction: discord.Interaction):
 
 
 # --- RUN BOT ---
-BOT_TOKEN =  "MTU2MTQ4MzUzNDc3NjkzMDMwNg.GEpPys.3TNo7_vNoPiMLI65mA2dTLagylWMGkGEwxj5Es"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 
 if __name__ == "__main__":
   bot.run(BOT_TOKEN)
