@@ -3,6 +3,7 @@ import os
 import sqlite3
 
 import discord
+import requests
 from discord import app_commands
 from discord.ext import commands
 
@@ -10,6 +11,7 @@ BOT_NAME = "Vleague Administrator"
 DB_PATH = os.path.join(os.path.dirname(__file__), "efootball_league.db")
 PLAYERS_PATH = os.path.join(os.path.dirname(__file__), "players.json")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+PLAYER_API_URL = os.getenv("PLAYER_API_URL")
 
 OFFICIAL_TEAMS = [
     "Coach Youssef Mohab's Team",
@@ -58,6 +60,40 @@ def load_players():
         return []
 
 
+def search_players(query: str):
+    query = query.strip().lower()
+    if not query:
+        return []
+
+    if PLAYER_API_URL:
+        try:
+            response = requests.get(
+                f"{PLAYER_API_URL.rstrip('/')}/search",
+                params={"q": query},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                players = data.get("players", [])
+                if players:
+                    return players
+        except Exception:
+            pass
+
+    players = load_players()
+    matches = []
+    for player in players:
+        searchable = " ".join(
+            [
+                player.get("name", "").lower(),
+                *[keyword.lower() for keyword in player.get("keywords", [])],
+            ]
+        )
+        if query in searchable:
+            matches.append(player)
+    return matches
+
+
 class VleagueBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
@@ -89,27 +125,19 @@ async def on_ready():
 async def search_player(interaction: discord.Interaction, player_name: str):
     await interaction.response.defer()
 
-    query = player_name.strip().lower()
-    players = load_players()
-
-    matched_player = None
-    for player in players:
-        searchable = " ".join([player.get("name", "").lower(), *[keyword.lower() for keyword in player.get("keywords", [])]])
-        if query in searchable:
-            matched_player = player
-            break
-
-    if not matched_player:
+    matches = search_players(player_name)
+    if not matches:
         await interaction.followup.send(f"❌ No player matched '{player_name}'. Try another name or keyword.")
         return
 
-    embed = create_league_embed(f"⚽ {matched_player['name']}", discord.Color.gold())
-    embed.add_field(name="Player Name", value=matched_player["name"], inline=True)
-    embed.add_field(name="OVR", value=str(matched_player.get("ovr", "N/A")), inline=True)
-    embed.add_field(name="Position", value=matched_player.get("position", "N/A"), inline=True)
-    embed.add_field(name="Club / Team", value=matched_player.get("team", "N/A"), inline=False)
-    if matched_player.get("nationality"):
-        embed.add_field(name="Nationality", value=matched_player["nationality"], inline=True)
+    player = matches[0]
+    embed = create_league_embed(f"⚽ {player['name']}", discord.Color.gold())
+    embed.add_field(name="Player Name", value=player["name"], inline=True)
+    embed.add_field(name="OVR", value=str(player.get("ovr", "N/A")), inline=True)
+    embed.add_field(name="Position", value=player.get("position", "N/A"), inline=True)
+    embed.add_field(name="Club / Team", value=player.get("team", "N/A"), inline=False)
+    if player.get("nationality"):
+        embed.add_field(name="Nationality", value=player["nationality"], inline=True)
 
     await interaction.followup.send(embed=embed)
 
